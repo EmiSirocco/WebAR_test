@@ -211,15 +211,18 @@
   const makePanel = () => {
     const g = new THREE.Group()
     // 立ち絵の画像（背景が透明なPNG）。読み込めなければ仮のイラストを使う
-    const IMG_ASPECT = 700 / 1167   // 幅 ÷ 高さ
+    // 立ち絵の切り替え：通常は鹿教湯の子。URLの末尾に ?c=test で前の試作の子
+    const IMG_FILE = new URLSearchParams(location.search).get('c') === 'test' ? 'musume.png' : 'kakeyu.png'
     const mat = new THREE.MeshBasicMaterial({map: new THREE.CanvasTexture(drawGirl()), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide})
     mat.map.colorSpace = THREE.SRGBColorSpace
-    new THREE.TextureLoader().load('musume.png', (tex) => {
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(1, PANEL_H), mat)
+    panel.scale.x = PANEL_H * 700 / 1167
+    new THREE.TextureLoader().load(IMG_FILE, (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace
       mat.map = tex
       mat.needsUpdate = true
+      panel.scale.x = PANEL_H * tex.image.width / tex.image.height   // 画像の縦横比に合わせる
     })
-    const panel = new THREE.Mesh(new THREE.PlaneGeometry(PANEL_H * IMG_ASPECT, PANEL_H), mat)
     panel.position.y = PANEL_H / 2
     const shadow = new THREE.Mesh(
       new THREE.CircleGeometry(0.3, 32),
