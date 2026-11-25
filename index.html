@@ -75,6 +75,8 @@
 
 <script>
   const CHAR_PARAM = new URLSearchParams(location.search).get('c')
+  // ?debug=1 のときだけ、距離や身長などの確認用の表示を出す（本番では出さない）
+  const DEBUG = new URLSearchParams(location.search).get('debug') === '1'
 {
   // ---- 仮のキャラクター（温泉むすめの代わり。頭にタオルをのせた湯けむりの子）----
   const makeCharacter = () => {
@@ -363,7 +365,7 @@
     }
     character.scale.setScalar(userScale)
     showSize()
-    sizeLabel.style.display = 'block'
+    if (DEBUG) sizeLabel.style.display = 'block'
     // カメラの方を向かせる
     character.rotation.y = Math.atan2(cam.position.x - pt.x, cam.position.z - pt.z)
     character.visible = true
@@ -523,7 +525,7 @@
       const here = {lat: pos.coords.latitude, lng: pos.coords.longitude}, acc = Math.round(pos.coords.accuracy)
       if (!center) { center = here; try { localStorage.setItem(KEY, JSON.stringify(center)) } catch (e) {} }
       const d = Math.round(meters(center, here))
-      info.style.display = 'block'
+      if (DEBUG) info.style.display = 'block'
       info.textContent = '中心から ' + d + 'm（誤差 ±' + acc + 'm）／ 範囲 ' + R + 'm'
       if (d <= R) {
         gate.style.display = 'none'
