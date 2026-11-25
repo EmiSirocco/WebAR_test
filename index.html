@@ -27,6 +27,10 @@
   #size{position:fixed;right:12px;top:max(16px,env(safe-area-inset-top));z-index:11;display:none;background:rgba(0,0,0,.55);padding:8px 12px;border-radius:999px;font-size:13px}
   #credit{position:fixed;left:8px;bottom:4px;z-index:11;font-size:10px;opacity:.7}
   #credit a{color:#fff}
+  #geoGate{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;text-align:center}
+  #geoGate h2{margin:0;font-size:20px}
+  #geoGate p{margin:0;font-size:15px;line-height:1.6;opacity:.9}
+  #geoInfo{position:fixed;left:12px;bottom:calc(max(24px,env(safe-area-inset-bottom)) + 92px);z-index:11;display:none;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:8px;font-size:12px}
 </style>
 </head>
 <body>
@@ -49,6 +53,9 @@
     <button class="sub" id="close">もう一枚撮る</button>
   </div>
 </div>
+
+<div id="geoGate"><h2 id="geoTitle">位置を確認しています</h2><p id="geoMsg">位置情報の利用を「許可」してください</p><button class="main" id="geoRetry" style="display:none">もう一度確認する</button></div>
+<div id="geoInfo"></div>
 
 <div id="credit">Powered by 8th Wall Engine © Niantic Spatial, Inc. <a href="https://github.com/8thwall/engine/blob/main/LICENSE">License</a></div>
 
@@ -454,7 +461,56 @@
     XR8.run({canvas: document.getElementById('camerafeed')})
   }
   const start = () => window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
-  window.XRExtras ? start() : window.addEventListener('xrextrasloaded', start)
+  const startAR = () => window.XRExtras ? start() : window.addEventListener('xrextrasloaded', start)
+
+  // ---- 位置情報のテスト（?geo=1）----
+  // 初めて開いた場所を中心として、このスマホに記録する。中心から半径（?r=、標準300m）の外では体験できない
+  // ?geo=reset で中心を消す（次に開いた場所が新しい中心になる）
+  const Q = new URLSearchParams(location.search)
+  const GEO = Q.get('geo')
+  if (!GEO) { startAR() } else {
+    const KEY = 'webar_geo_center', R = Number(Q.get('r')) || 300
+    if (GEO === 'reset') { try { localStorage.removeItem(KEY) } catch (e) {} }
+    const gate = document.getElementById('geoGate'), gTitle = document.getElementById('geoTitle'),
+          gMsg = document.getElementById('geoMsg'), gRetry = document.getElementById('geoRetry'),
+          info = document.getElementById('geoInfo')
+    const showGate = (t, m, retry) => { gate.style.display = 'flex'; gTitle.textContent = t; gMsg.innerHTML = m; gRetry.style.display = retry ? 'block' : 'none' }
+    const meters = (a, b) => {
+      const r = 6371000, k = Math.PI / 180
+      const dLat = (b.lat - a.lat) * k, dLng = (b.lng - a.lng) * k
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * k) * Math.cos(b.lat * k) * Math.sin(dLng / 2) ** 2
+      return 2 * r * Math.asin(Math.sqrt(h))
+    }
+    let center = null, started = false, watchId = null
+    try { center = JSON.parse(localStorage.getItem(KEY)) } catch (e) {}
+    const onPos = (pos) => {
+      const here = {lat: pos.coords.latitude, lng: pos.coords.longitude}, acc = Math.round(pos.coords.accuracy)
+      if (!center) { center = here; try { localStorage.setItem(KEY, JSON.stringify(center)) } catch (e) {} }
+      const d = Math.round(meters(center, here))
+      info.style.display = 'block'
+      info.textContent = '中心から ' + d + 'm（誤差 ±' + acc + 'm）／ 範囲 ' + R + 'm'
+      if (d <= R) {
+        gate.style.display = 'none'
+        if (!started) { started = true; startAR() }
+      } else {
+        showGate('ここでは体験できません', '現地でのみ体験できます。<br>中心から ' + d + 'm 離れています（範囲は ' + R + 'm 以内）', true)
+      }
+    }
+    const onErr = (err) => {
+      const m = err.code === 1
+        ? '位置情報が許可されていません。<br>iPhoneの「設定」→「プライバシーとセキュリティ」→「位置情報サービス」で、使っているブラウザ（SafariまたはChrome）を「使用中のみ許可」にしてから、もう一度確認してください'
+        : '位置を確認できませんでした。電波の良い場所で、もう一度確認してください'
+      showGate('位置を確認できません', m, true)
+    }
+    const watch = () => {
+      showGate('位置を確認しています', '位置情報の利用を「許可」してください', false)
+      if (!navigator.geolocation) return showGate('位置を確認できません', 'このブラウザは位置情報に対応していません', false)
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+      watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000})
+    }
+    gRetry.addEventListener('click', watch)
+    watch()
+  }
 }
 </script>
 </body>
