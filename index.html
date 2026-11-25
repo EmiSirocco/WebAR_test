@@ -273,7 +273,7 @@
   // 大きさのモード：等身大（床に立つ）／卓上（テーブルに立つ約20cm）
   // スマホの高さを「床から1.4m」「テーブルから0.45m」と仮定して、だいたいの実寸に合わせる
   const SIZE_MODES = {
-    life:  {camH: 1.4,  scale: 1,              hint: 'スマホをゆっくり左右に動かしてから、床をタップしてください（2本指で大きさを変えられます）', next: '卓上サイズにする'},
+    life:  {camH: 1.4,  scale: 1,              hint: 'スマホをゆっくり左右に動かしてから、床をタップしてください', next: '卓上サイズにする'},
     table: {camH: 0.45, scale: 0.20 / PANEL_H, hint: 'テーブルを映したまま、スマホをゆっくり左右に動かしてから、テーブルをタップしてください', next: '等身大にする'},
   }
   // ちびキャラ（?c=chibi）は卓上サイズから始める
@@ -379,12 +379,13 @@
     hint.style.display = 'none'
   }
 
-  // 1本指タップで置く／2本指でつまんで大きさを変える
+  // 1本指タップで置く／（確認用のみ）2本指でつまんで大きさを変える
   const feed = document.getElementById('camerafeed')
   let pinchStart = 0, scaleStart = 1
   const dist = (e) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
   feed.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) { pinchStart = dist(e); scaleStart = userScale; pinched = true; return }
+    // 2本指で大きさを変えるのは確認用（?debug=1）だけ。持ち方によって知らないうちに縮むのを防ぐ
+    if (e.touches.length === 2) { if (DEBUG) { pinchStart = dist(e); scaleStart = userScale; pinched = true } return }
     if (e.touches.length !== 1 || placed) return
     placeAt(e.touches[0].clientX, e.touches[0].clientY)
   }, {passive: true})
