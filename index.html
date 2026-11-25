@@ -53,6 +53,7 @@
 <div id="credit">Powered by 8th Wall Engine © Niantic Spatial, Inc. <a href="https://github.com/8thwall/engine/blob/main/LICENSE">License</a></div>
 
 <script>
+  const CHAR_PARAM = new URLSearchParams(location.search).get('c')
 {
   // ---- 仮のキャラクター（温泉むすめの代わり。頭にタオルをのせた湯けむりの子）----
   const makeCharacter = () => {
@@ -212,7 +213,7 @@
     const g = new THREE.Group()
     // 立ち絵の画像（背景が透明なPNG）。読み込めなければ仮のイラストを使う
     // 立ち絵の切り替え：通常は鹿教湯の子。URLの末尾に ?c=test で前の試作の子
-    const IMG_FILE = new URLSearchParams(location.search).get('c') === 'test' ? 'musume.png' : 'kakeyu.png'
+    const IMG_FILE = {test: 'musume.png', chibi: 'chibi.png'}[CHAR_PARAM] || 'kakeyu.png'
     const mat = new THREE.MeshBasicMaterial({map: new THREE.CanvasTexture(drawGirl()), transparent: true, alphaTest: 0.1, side: THREE.DoubleSide})
     mat.map.colorSpace = THREE.SRGBColorSpace
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(1, PANEL_H), mat)
@@ -252,7 +253,9 @@
     life:  {camH: 1.4,  scale: 1,              hint: '床をタップするとキャラが出ます（2本指で大きさを変えられます）', next: '卓上サイズにする'},
     table: {camH: 0.45, scale: 0.20 / PANEL_H, hint: 'テーブルの面を映して、タップしてください', next: '等身大にする'},
   }
-  let sizeMode = 'life'
+  // ちびキャラ（?c=chibi）は卓上サイズから始める
+  let sizeMode = CHAR_PARAM === 'chibi' ? 'table' : 'life'
+  if (sizeMode === 'table') userScale = SIZE_MODES.table.scale
 
   // ---- 床をタップしてキャラを置く ----
   const placeModule = () => ({
@@ -287,7 +290,8 @@
       XR8.XrController.updateCameraProjectionMatrix({
         origin: camera.position, facing: camera.quaternion,
       })
-      hintText.textContent = '床をタップするとキャラが出ます（2本指で大きさを変えられます）'
+      hintText.textContent = SIZE_MODES[sizeMode].hint
+      document.getElementById('sizeMode').textContent = SIZE_MODES[sizeMode].next
     },
     onUpdate: () => {
       if (!character || !character.visible) return
