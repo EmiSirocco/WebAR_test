@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>WebAR 記念写真テスト</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;color:#fff}
+  #camerafeed{position:fixed;inset:0;width:100%;height:100%}
+  .ui{position:fixed;left:0;right:0;z-index:10;display:flex;justify-content:center;pointer-events:none}
+  #hint{top:max(16px,env(safe-area-inset-top));}
+  #hint span{background:rgba(0,0,0,.55);padding:10px 16px;border-radius:999px;font-size:15px}
+  #bar{bottom:max(24px,env(safe-area-inset-bottom));gap:18px;align-items:center}
+  button{pointer-events:auto;border:0;font:inherit;cursor:pointer}
+  #shutter{width:76px;height:76px;border-radius:50%;background:#fff;box-shadow:0 0 0 5px rgba(255,255,255,.45)}
+  #shutter:active{transform:scale(.92)}
+  .sub{background:rgba(0,0,0,.55);color:#fff;padding:12px 16px;border-radius:999px;font-size:14px;min-height:44px}
+  #result{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px}
+  #result img{max-width:100%;max-height:68vh;border-radius:12px}
+  #result p{margin:0;font-size:14px;opacity:.85;text-align:center}
+  #result .row{display:flex;gap:12px}
+  .main{background:#ff7a59;color:#fff;padding:14px 22px;border-radius:999px;font-size:16px;min-height:44px}
+  #credit{position:fixed;left:8px;bottom:4px;z-index:11;font-size:10px;opacity:.7}
+  #credit a{color:#fff}
+</style>
+</head>
+<body>
+<canvas id="camerafeed"></canvas>
+
+<div class="ui" id="hint"><span id="hintText">スマホをゆっくり左右に動かして、床を映してください</span></div>
+<div class="ui" id="bar">
+  <button class="sub" id="reset">置き直す</button>
+  <button id="shutter" aria-label="写真を撮る"></button>
+  <button class="sub" id="turn">向きを変える</button>
+</div>
+
+<div id="result">
+  <img id="photo" alt="撮った写真">
+  <p id="saveHint">画像を長押しすると保存できます</p>
+  <div class="row">
+    <button class="main" id="share">保存・共有</button>
+    <button class="sub" id="close">もう一枚撮る</button>
+  </div>
+</div>
+
+<div id="credit">Powered by 8th Wall Engine © Niantic Spatial, Inc. <a href="https://github.com/8thwall/engine/blob/main/LICENSE">License</a></div>
+
+<script>
+{
+  // ---- 仮のキャラクター（温泉むすめの代わり。頭にタオルをのせた湯けむりの子）----
+  const makeCharacter = () => {
+    const g = new THREE.Group()
+    const mat = (c) => new THREE.MeshStandardMaterial({color: c, roughness: 0.7})
+    const skin = mat(0xffe0c8), robe = mat(0x5b7fd6), towel = mat(0xffffff), dark = mat(0x333333), cheek = mat(0xff9aa2)
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.26, 0.6, 24), robe)
+    body.position.y = 0.42
+    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.205, 0.205, 0.06, 24), mat(0xd94f4f))
+    belt.position.y = 0.5
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 32, 24), skin)
+    head.position.y = 0.92
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.205, 32, 24, 0, Math.PI * 2, 0, Math.PI * 0.55), mat(0x3a2a22))
+    hair.position.y = 0.93
+    hair.rotation.x = -0.35
+    const tw = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.07, 0.16), towel)
+    tw.position.set(0, 1.12, 0)
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.025, 12, 8), dark)
+    const eyeR = eyeL.clone()
+    eyeL.position.set(-0.07, 0.94, 0.18)
+    eyeR.position.set(0.07, 0.94, 0.18)
+    const chL = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), cheek)
+    const chR = chL.clone()
+    chL.position.set(-0.11, 0.88, 0.16)
+    chR.position.set(0.11, 0.88, 0.16)
+    chL.scale.z = chR.scale.z = 0.4
+
+    const armL = new THREE.Group()
+    const armMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.32, 12), robe)
+    armMesh.position.y = -0.16
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), skin)
+    hand.position.y = -0.33
+    armL.add(armMesh, hand)
+    armL.position.set(-0.2, 0.68, 0)
+    armL.rotation.z = -0.25
+    const armR = armL.clone()
+    armR.position.x = 0.2
+
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.3, 32),
+      new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, opacity: 0.25})
+    )
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.y = 0.005
+
+    g.add(body, belt, head, hair, tw, eyeL, eyeR, chL, chR, armL, armR, shadow)
+    g.userData = {armR, inner: [body, belt, head, hair, tw, eyeL, eyeR, chL, chR, armL, armR]}
+    g.traverse(o => { if (o.isMesh && o !== shadow) o.castShadow = true })
+    return g
+  }
+
+  const hintText = document.getElementById('hintText')
+  const hint = document.getElementById('hint')
+  let character = null, placed = false, surface = null, cam = null, sceneRef = null
+
+  // ---- 床をタップしてキャラを置く ----
+  const placeModule = () => ({
+    name: 'place-character',
+    onStart: ({canvasWidth, canvasHeight}) => {
+      const {scene, camera, renderer} = XR8.Threejs.xrScene()
+      sceneRef = scene; cam = camera
+      renderer.shadowMap.enabled = true
+      renderer.outputColorSpace = THREE.SRGBColorSpace
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.6))
+      const sun = new THREE.DirectionalLight(0xffffff, 1.4)
+      sun.position.set(1, 4, 2)
+      scene.add(sun)
+
+      surface = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({visible: false}))
+      surface.rotation.x = -Math.PI / 2
+      scene.add(surface)
+
+      character = makeCharacter()
+      character.visible = false
+      scene.add(character)
+
+      // スマホを持つ高さ ≒ 1.4m として、単位をほぼメートルに合わせる
+      camera.position.set(0, 1.4, 0)
+      XR8.XrController.updateCameraProjectionMatrix({
+        origin: camera.position, facing: camera.quaternion,
+      })
+      hintText.textContent = '床をタップすると、キャラが出てきます'
+    },
+    onUpdate: () => {
+      if (!character || !character.visible) return
+      const t = performance.now() / 1000
+      character.userData.armR.rotation.z = 2.4 + Math.sin(t * 6) * 0.35   // 手を振る
+      character.position.y = Math.abs(Math.sin(t * 2)) * 0.02   // 小さく弾む
+    },
+  })
+
+  const ray = new THREE.Raycaster()
+  const placeAt = (x, y) => {
+    if (!cam || !surface) return
+    const p = new THREE.Vector2(x / window.innerWidth * 2 - 1, -(y / window.innerHeight) * 2 + 1)
+    ray.setFromCamera(p, cam)
+    const hit = ray.intersectObject(surface)
+    if (!hit.length) return
+    const pt = hit[0].point
+    character.position.set(pt.x, 0, pt.z)
+    character.userData.baseY = 0
+    // カメラの方を向かせる
+    character.rotation.y = Math.atan2(cam.position.x - pt.x, cam.position.z - pt.z)
+    character.visible = true
+    placed = true
+    hint.style.display = 'none'
+  }
+
+  document.getElementById('camerafeed').addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || placed) return
+    placeAt(e.touches[0].clientX, e.touches[0].clientY)
+  }, {passive: true})
+
+  document.getElementById('reset').onclick = () => {
+    placed = false
+    if (character) character.visible = false
+    hint.style.display = 'flex'
+    hintText.textContent = '置きたい場所の床をタップしてください'
+  }
+  document.getElementById('turn').onclick = () => {
+    if (character) character.rotation.y += Math.PI / 4
+  }
+
+  // ---- 写真を撮る ----
+  let lastBlob = null
+  const result = document.getElementById('result')
+  const photo = document.getElementById('photo')
+  document.getElementById('shutter').onclick = async () => {
+    try {
+      const b64 = await XR8.CanvasScreenshot.takeScreenshot()
+      photo.src = 'data:image/jpeg;base64,' + b64
+      const bin = atob(b64), arr = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+      lastBlob = new Blob([arr], {type: 'image/jpeg'})
+      result.style.display = 'flex'
+    } catch (err) {
+      hint.style.display = 'flex'
+      hintText.textContent = '撮影できませんでした：' + err
+    }
+  }
+  document.getElementById('close').onclick = () => { result.style.display = 'none' }
+  document.getElementById('share').onclick = async () => {
+    if (!lastBlob) return
+    const file = new File([lastBlob], 'ar-kinen.jpg', {type: 'image/jpeg'})
+    if (navigator.canShare && navigator.canShare({files: [file]})) {
+      try { await navigator.share({files: [file], title: 'AR記念写真'}) } catch (e) {}
+    } else {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(lastBlob)
+      a.download = 'ar-kinen.jpg'
+      a.click()
+    }
+  }
+
+  // ---- 起動 ----
+  const onxrloaded = () => {
+    XR8.XrController.configure({scale: 'responsive'})
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      XR8.XrController.pipelineModule(),
+      XR8.CanvasScreenshot.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      placeModule(),
+    ])
+    XR8.run({canvas: document.getElementById('camerafeed')})
+  }
+  const start = () => window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
+  window.XRExtras ? start() : window.addEventListener('xrextrasloaded', start)
+}
+</script>
+</body>
+</html>
