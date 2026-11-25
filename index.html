@@ -331,11 +331,14 @@
       const t = performance.now() / 1000
       char3d.userData.armR.rotation.z = 2.4 + Math.sin(t * 6) * 0.35   // 手を振る
       const p = char2d.userData.panel
-      p.rotation.z = Math.sin(t * 1.5) * 0.008   // ほんの少しだけ揺れる
       // 2Dはいつもカメラの方を向く（看板が横から見えて薄くならないように）
+      // カメラの位置の細かいブレをそのまま拾うと震えて見えるので、ゆっくり追いかける
       if (mode === '2d') {
         const wp = character.position
-        character.rotation.y = Math.atan2(cam.position.x - wp.x, cam.position.z - wp.z)
+        const target = Math.atan2(cam.position.x - wp.x, cam.position.z - wp.z)
+        let diff = target - character.rotation.y
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff))
+        if (Math.abs(diff) > 0.02) character.rotation.y += diff * Math.min(1, dt * 4)
       }
     },
   })
