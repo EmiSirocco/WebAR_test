@@ -27,6 +27,14 @@
   #size{position:fixed;right:12px;top:max(16px,env(safe-area-inset-top));z-index:11;display:none;background:rgba(0,0,0,.55);padding:8px 12px;border-radius:999px;font-size:13px}
   #credit{position:fixed;left:8px;bottom:4px;z-index:11;font-size:10px;opacity:.7}
   #credit a{color:#fff}
+  #intro{position:fixed;inset:0;z-index:40;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center}
+  #intro h2{margin:0;font-size:22px}
+  #intro p{margin:0;font-size:15px;line-height:1.6;opacity:.9}
+  #intro ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px;text-align:left}
+  #intro li{background:rgba(255,255,255,.08);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.5}
+  #intro li b{display:block;font-size:16px}
+  #intro li.now{outline:2px solid #ff7a59}
+  #intro li.done{opacity:.5}
   #geoGate{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.94);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:28px;text-align:center}
   #geoGate h2{margin:0;font-size:20px}
   #geoGate p{margin:0;font-size:15px;line-height:1.6;opacity:.9}
@@ -54,6 +62,12 @@
   </div>
 </div>
 
+<div id="intro">
+  <h2>体験を始める前に</h2>
+  <p>このあと、スマホから確認が出ます。<br>すべて「許可」を押してください。</p>
+  <ol id="introList"></ol>
+  <button class="main" id="introStart">はじめる</button>
+</div>
 <div id="geoGate"><h2 id="geoTitle">位置を確認しています</h2><p id="geoMsg">位置情報の利用を「許可」してください</p><button class="main" id="geoRetry" style="display:none">もう一度確認する</button></div>
 <div id="geoInfo"></div>
 
@@ -463,12 +477,34 @@
   const start = () => window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded)
   const startAR = () => window.XRExtras ? start() : window.addEventListener('xrextrasloaded', start)
 
+  // ---- 許可の案内 ----
+  // 先に「何の確認が出るか」をまとめて見せ、ボタンを押してから順番に確認を出す
+  // （動作と方向 → 位置情報 → カメラ の順。iPhoneの動作と方向は、ボタンを押したときにしか確認を出せない）
+  const Q = new URLSearchParams(location.search)
+  const GEO = Q.get('geo')
+  const needMotion = typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'
+  const steps = []
+  if (needMotion) steps.push(['motion', '動作と方向', 'スマホの動きに合わせて、キャラクターをその場にとどめるために使います'])
+  if (GEO) steps.push(['geo', '位置情報', '現地にいるかを確かめるために使います'])
+  steps.push(['camera', 'カメラ', '景色にキャラクターを重ねて、写真を撮るために使います。写真は外に送りません'])
+  const intro = document.getElementById('intro'), introList = document.getElementById('introList')
+  introList.innerHTML = steps.map((st, i) => '<li id="st_' + st[0] + '"><b>' + (i + 1) + '．' + st[1] + '</b>' + st[2] + '</li>').join('')
+  const mark = (id) => { steps.forEach(st => { const el = document.getElementById('st_' + st[0]); el.classList.remove('now'); if (st[0] === id) el.classList.add('now') }) }
+  const done = (id) => { const el = document.getElementById('st_' + id); if (el) { el.classList.remove('now'); el.classList.add('done') } }
+
+  const askMotion = async () => {
+    if (!needMotion) return
+    mark('motion')
+    try { await DeviceMotionEvent.requestPermission() } catch (e) {}
+    try { await DeviceOrientationEvent.requestPermission() } catch (e) {}
+    done('motion')
+  }
+  const goCamera = () => { mark('camera'); intro.style.display = 'none'; startAR() }
+
   // ---- 位置情報のテスト（?geo=1）----
   // 初めて開いた場所を中心として、このスマホに記録する。中心から半径（?r=、標準300m）の外では体験できない
   // ?geo=reset で中心を消す（次に開いた場所が新しい中心になる）
-  const Q = new URLSearchParams(location.search)
-  const GEO = Q.get('geo')
-  if (!GEO) { startAR() } else {
+  const geoCheck = (onInside) => {
     const KEY = 'webar_geo_center', R = Number(Q.get('r')) || 300
     if (GEO === 'reset') { try { localStorage.removeItem(KEY) } catch (e) {} }
     const gate = document.getElementById('geoGate'), gTitle = document.getElementById('geoTitle'),
@@ -481,7 +517,7 @@
       const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * k) * Math.cos(b.lat * k) * Math.sin(dLng / 2) ** 2
       return 2 * r * Math.asin(Math.sqrt(h))
     }
-    let center = null, started = false, watchId = null
+    let center = null, inside = false, watchId = null
     try { center = JSON.parse(localStorage.getItem(KEY)) } catch (e) {}
     const onPos = (pos) => {
       const here = {lat: pos.coords.latitude, lng: pos.coords.longitude}, acc = Math.round(pos.coords.accuracy)
@@ -491,7 +527,7 @@
       info.textContent = '中心から ' + d + 'm（誤差 ±' + acc + 'm）／ 範囲 ' + R + 'm'
       if (d <= R) {
         gate.style.display = 'none'
-        if (!started) { started = true; startAR() }
+        if (!inside) { inside = true; done('geo'); onInside() }
       } else {
         showGate('ここでは体験できません', '現地でのみ体験できます。<br>中心から ' + d + 'm 離れています（範囲は ' + R + 'm 以内）', true)
       }
@@ -503,14 +539,21 @@
       showGate('位置を確認できません', m, true)
     }
     const watch = () => {
-      showGate('位置を確認しています', '位置情報の利用を「許可」してください', false)
       if (!navigator.geolocation) return showGate('位置を確認できません', 'このブラウザは位置情報に対応していません', false)
       if (watchId !== null) navigator.geolocation.clearWatch(watchId)
       watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000})
     }
     gRetry.addEventListener('click', watch)
+    mark('geo')
     watch()
   }
+
+  document.getElementById('introStart').addEventListener('click', async (e) => {
+    e.target.disabled = true; e.target.textContent = '確認中…'
+    // 動作と方向はボタンを押した直後でないと確認を出せないので、最初に出す
+    await askMotion()
+    if (GEO) geoCheck(goCamera); else goCamera()
+  })
 }
 </script>
 </body>
