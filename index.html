@@ -531,7 +531,7 @@
         gate.style.display = 'none'
         if (!inside) { inside = true; done('geo'); onInside() }
       } else {
-        showGate('ここでは体験できません', '現地でのみ体験できます。<br>中心から ' + d + 'm 離れています（範囲は ' + R + 'm 以内）', true)
+        showGate('ここでは体験できません', '現地でのみ体験できます。' + (DEBUG ? '<br>中心から ' + d + 'm 離れています（範囲は ' + R + 'm 以内）' : ''), true)
       }
     }
     const onErr = (err) => {
