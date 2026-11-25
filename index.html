@@ -244,7 +244,7 @@
   const hintText = document.getElementById('hintText')
   const hint = document.getElementById('hint')
   const sizeLabel = document.getElementById('size')
-  let character = null, char3d = null, char2d = null, mode = '2d', userScale = 1
+  let character = null, char3d = null, char2d = null, mode = '2d', userScale = 1, pinched = false
   let placed = false, surface = null, cam = null, sceneRef = null
   const showSize = () => { sizeLabel.textContent = '身長 約' + Math.round(PANEL_H * userScale * 100) + 'cm' }
   // 大きさのモード：等身大（床に立つ）／卓上（テーブルに立つ約20cm）
@@ -334,6 +334,12 @@
       pt = hit[0].point.clone(); pt.y = 0
     }
     character.position.set(pt.x, pt.y, pt.z)
+    // 卓上サイズは、カメラからの距離に合わせて大きさを決める（画面の高さの3割くらいに見える大きさ）
+    // 距離の測り方が端末によってずれても、小さくなりすぎないように
+    if (sizeMode === 'table' && !pinched) {
+      const d = cam.position.distanceTo(pt)
+      userScale = Math.min(0.6, Math.max(0.05, 0.35 * d / PANEL_H))
+    }
     character.scale.setScalar(userScale)
     showSize()
     sizeLabel.style.display = 'block'
@@ -352,7 +358,7 @@
   let pinchStart = 0, scaleStart = 1
   const dist = (e) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
   feed.addEventListener('touchstart', (e) => {
-    if (e.touches.length === 2) { pinchStart = dist(e); scaleStart = userScale; return }
+    if (e.touches.length === 2) { pinchStart = dist(e); scaleStart = userScale; pinched = true; return }
     if (e.touches.length !== 1 || placed) return
     placeAt(e.touches[0].clientX, e.touches[0].clientY)
   }, {passive: true})
@@ -369,7 +375,7 @@
     if (!cam) return
     sizeMode = sizeMode === 'life' ? 'table' : 'life'
     const m = SIZE_MODES[sizeMode]
-    userScale = m.scale
+    userScale = m.scale; pinched = false
     // 置き直し：スマホの高さの想定を変えて、床（またはテーブル）を測り直す
     placed = false
     character.visible = false
