@@ -425,7 +425,8 @@
 
   // ---- 起動 ----
   const onxrloaded = () => {
-    XR8.XrController.configure({scale: 'responsive'})
+    // ?abs=1 で実寸モード（スマホを少し動かして測ってから始まる。回り込んだときのズレが減る想定）
+    XR8.XrController.configure({scale: new URLSearchParams(location.search).get('abs') === '1' ? 'absolute' : 'responsive'})
     XR8.addCameraPipelineModules([
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
