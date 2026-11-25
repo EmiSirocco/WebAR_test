@@ -217,11 +217,13 @@
     mat.map.colorSpace = THREE.SRGBColorSpace
     const panel = new THREE.Mesh(new THREE.PlaneGeometry(1, PANEL_H), mat)
     panel.scale.x = PANEL_H * 700 / 1167
+    panel.visible = false   // 画像が読み込めるまでは出さない（仮のイラストが一瞬見えないように）
     new THREE.TextureLoader().load(IMG_FILE, (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace
       mat.map = tex
       mat.needsUpdate = true
       panel.scale.x = PANEL_H * tex.image.width / tex.image.height   // 画像の縦横比に合わせる
+      panel.visible = true
     })
     panel.position.y = PANEL_H / 2
     const shadow = new THREE.Mesh(
