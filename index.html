@@ -159,7 +159,8 @@
     )
     shadow.rotation.x = -Math.PI / 2
     shadow.position.y = 0.005
-    shadow.scale.set(1, 0.6, 1)
+    shadow.scale.set(0.75, 0.45, 1)
+    shadow.position.z = -0.06   // 足の真下〜少し後ろに影を置いて、浮いて見えないように
     g.add(panel, shadow)
     g.userData.panel = panel
     return g
@@ -211,8 +212,7 @@
       const t = performance.now() / 1000
       char3d.userData.armR.rotation.z = 2.4 + Math.sin(t * 6) * 0.35   // 手を振る
       const p = char2d.userData.panel
-      p.position.y = PANEL_H / 2 + Math.abs(Math.sin(t * 2)) * 0.02     // 小さく弾む
-      p.rotation.z = Math.sin(t * 1.5) * 0.02
+      p.rotation.z = Math.sin(t * 1.5) * 0.008   // ほんの少しだけ揺れる
       // 2Dはいつもカメラの方を向く（看板が横から見えて薄くならないように）
       if (mode === '2d') {
         const wp = character.position
