@@ -322,10 +322,18 @@
     if (!cam || !surface) return
     const p = new THREE.Vector2(x / window.innerWidth * 2 - 1, -(y / window.innerHeight) * 2 + 1)
     ray.setFromCamera(p, cam)
-    const hit = ray.intersectObject(surface)
-    if (!hit.length) return
-    const pt = hit[0].point
-    character.position.set(pt.x, 0, pt.z)
+    // まず、カメラが見つけた実際の面（テーブルの上など）に置く。見つからなければ、床の面に置く
+    let pt = null
+    try {
+      const hits = XR8.XrController.hitTest(x / window.innerWidth, y / window.innerHeight, ['FEATURE_POINT', 'ESTIMATED_SURFACE'])
+      if (hits && hits.length) pt = new THREE.Vector3(hits[0].position.x, hits[0].position.y, hits[0].position.z)
+    } catch (e) {}
+    if (!pt) {
+      const hit = ray.intersectObject(surface)
+      if (!hit.length) return
+      pt = hit[0].point.clone(); pt.y = 0
+    }
+    character.position.set(pt.x, pt.y, pt.z)
     character.scale.setScalar(userScale)
     showSize()
     sizeLabel.style.display = 'block'
