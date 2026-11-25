@@ -23,6 +23,7 @@
   #result p{margin:0;font-size:14px;opacity:.85;text-align:center}
   #result .row{display:flex;gap:12px}
   .main{background:#ff7a59;color:#fff;padding:14px 22px;border-radius:999px;font-size:16px;min-height:44px}
+  #size{position:fixed;right:12px;top:max(16px,env(safe-area-inset-top));z-index:11;display:none;background:rgba(0,0,0,.55);padding:8px 12px;border-radius:999px;font-size:13px}
   #credit{position:fixed;left:8px;bottom:4px;z-index:11;font-size:10px;opacity:.7}
   #credit a{color:#fff}
 </style>
@@ -34,8 +35,9 @@
 <div class="ui" id="bar">
   <button class="sub" id="reset">置き直す</button>
   <button id="shutter" aria-label="写真を撮る"></button>
-  <button class="sub" id="turn">向きを変える</button>
+  <button class="sub" id="mode">3Dにする</button>
 </div>
+<div id="size">身長 約155cm</div>
 
 <div id="result">
   <img id="photo" alt="撮った写真">
@@ -101,9 +103,70 @@
     return g
   }
 
+  // ---- 2Dのキャラ（立ち絵をパネルにして立たせる）----
+  // 温泉むすめの立ち絵（透過PNG）に差し替える想定の、仮のイラスト
+  const drawGirl = () => {
+    const c = document.createElement('canvas')
+    c.width = 512; c.height = 1024
+    const x = c.getContext('2d')
+    const ell = (cx, cy, rx, ry, col) => { x.fillStyle = col; x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); x.fill() }
+    // 浴衣
+    x.fillStyle = '#4a6fc9'
+    x.beginPath(); x.moveTo(180, 380); x.lineTo(332, 380); x.lineTo(380, 990); x.lineTo(132, 990); x.closePath(); x.fill()
+    x.fillStyle = 'rgba(255,255,255,.85)'
+    for (let i = 0; i < 18; i++) { const px = 160 + (i * 73) % 200, py = 450 + (i * 131) % 500; ell(px, py, 9, 9, 'rgba(255,255,255,.8)') }
+    x.fillStyle = '#d94f4f'; x.fillRect(165, 560, 182, 46)                       // 帯
+    x.fillStyle = '#fff3e8'; x.beginPath(); x.moveTo(256, 380); x.lineTo(226, 380); x.lineTo(256, 470); x.lineTo(286, 380); x.fill() // 衿
+    // 腕（左は下ろし、右は手を振る）
+    x.strokeStyle = '#4a6fc9'; x.lineCap = 'round'; x.lineWidth = 56
+    x.beginPath(); x.moveTo(190, 410); x.lineTo(150, 640); x.stroke()
+    x.beginPath(); x.moveTo(322, 410); x.lineTo(420, 270); x.stroke()
+    ell(146, 668, 26, 26, '#ffe0c8'); ell(430, 238, 28, 28, '#ffe0c8')
+    // 足
+    ell(210, 1000, 34, 14, '#5a3b2b'); ell(302, 1000, 34, 14, '#5a3b2b')
+    // 顔と髪
+    ell(256, 330, 30, 40, '#ffe0c8')                                             // 首
+    ell(256, 230, 120, 125, '#3a2a22')                                           // 後ろ髪
+    ell(256, 250, 98, 104, '#ffe0c8')                                            // 顔
+    x.fillStyle = '#3a2a22'; x.beginPath(); x.ellipse(256, 190, 104, 70, 0, Math.PI, 0); x.fill() // 前髪
+    ell(218, 262, 12, 16, '#2b2b2b'); ell(294, 262, 12, 16, '#2b2b2b')            // 目
+    ell(222, 256, 4, 5, '#fff'); ell(298, 256, 4, 5, '#fff')
+    ell(196, 298, 18, 10, 'rgba(255,140,150,.7)'); ell(316, 298, 18, 10, 'rgba(255,140,150,.7)')
+    x.strokeStyle = '#a0524f'; x.lineWidth = 5; x.beginPath(); x.arc(256, 300, 18, 0.15 * Math.PI, 0.85 * Math.PI); x.stroke()
+    // 頭のタオル
+    x.fillStyle = '#ffffff'; x.fillRect(196, 98, 120, 40)
+    x.strokeStyle = '#dddddd'; x.lineWidth = 3; x.strokeRect(196, 98, 120, 40)
+    return c
+  }
+
+  const PANEL_H = 1.55   // 等身大（約155cm）
+  const makePanel = () => {
+    const g = new THREE.Group()
+    const tex = new THREE.CanvasTexture(drawGirl())
+    tex.colorSpace = THREE.SRGBColorSpace
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(PANEL_H / 2, PANEL_H),
+      new THREE.MeshBasicMaterial({map: tex, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide})
+    )
+    panel.position.y = PANEL_H / 2
+    const shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.3, 32),
+      new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, opacity: 0.25})
+    )
+    shadow.rotation.x = -Math.PI / 2
+    shadow.position.y = 0.005
+    shadow.scale.set(1, 0.6, 1)
+    g.add(panel, shadow)
+    g.userData.panel = panel
+    return g
+  }
+
   const hintText = document.getElementById('hintText')
   const hint = document.getElementById('hint')
-  let character = null, placed = false, surface = null, cam = null, sceneRef = null
+  const sizeLabel = document.getElementById('size')
+  let character = null, char3d = null, char2d = null, mode = '2d', userScale = 1
+  let placed = false, surface = null, cam = null, sceneRef = null
+  const showSize = () => { sizeLabel.textContent = '身長 約' + Math.round(PANEL_H * userScale * 100) + 'cm' }
 
   // ---- 床をタップしてキャラを置く ----
   const placeModule = () => ({
@@ -123,7 +186,12 @@
       surface.rotation.x = -Math.PI / 2
       scene.add(surface)
 
-      character = makeCharacter()
+      character = new THREE.Group()
+      char3d = makeCharacter()
+      char3d.scale.setScalar(PANEL_H / 1.15)   // 3Dの子も等身大に
+      char2d = makePanel()
+      character.add(char3d, char2d)
+      char3d.visible = false
       character.visible = false
       scene.add(character)
 
@@ -132,13 +200,20 @@
       XR8.XrController.updateCameraProjectionMatrix({
         origin: camera.position, facing: camera.quaternion,
       })
-      hintText.textContent = '床をタップすると、キャラが出てきます'
+      hintText.textContent = '床をタップするとキャラが出ます（2本指で大きさを変えられます）'
     },
     onUpdate: () => {
       if (!character || !character.visible) return
       const t = performance.now() / 1000
-      character.userData.armR.rotation.z = 2.4 + Math.sin(t * 6) * 0.35   // 手を振る
-      character.position.y = Math.abs(Math.sin(t * 2)) * 0.02   // 小さく弾む
+      char3d.userData.armR.rotation.z = 2.4 + Math.sin(t * 6) * 0.35   // 手を振る
+      const p = char2d.userData.panel
+      p.position.y = PANEL_H / 2 + Math.abs(Math.sin(t * 2)) * 0.02     // 小さく弾む
+      p.rotation.z = Math.sin(t * 1.5) * 0.02
+      // 2Dはいつもカメラの方を向く（看板が横から見えて薄くならないように）
+      if (mode === '2d') {
+        const wp = character.position
+        character.rotation.y = Math.atan2(cam.position.x - wp.x, cam.position.z - wp.z)
+      }
     },
   })
 
@@ -151,7 +226,9 @@
     if (!hit.length) return
     const pt = hit[0].point
     character.position.set(pt.x, 0, pt.z)
-    character.userData.baseY = 0
+    character.scale.setScalar(userScale)
+    showSize()
+    sizeLabel.style.display = 'block'
     // カメラの方を向かせる
     character.rotation.y = Math.atan2(cam.position.x - pt.x, cam.position.z - pt.z)
     character.visible = true
@@ -159,10 +236,22 @@
     hint.style.display = 'none'
   }
 
-  document.getElementById('camerafeed').addEventListener('touchstart', (e) => {
+  // 1本指タップで置く／2本指でつまんで大きさを変える
+  const feed = document.getElementById('camerafeed')
+  let pinchStart = 0, scaleStart = 1
+  const dist = (e) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+  feed.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) { pinchStart = dist(e); scaleStart = userScale; return }
     if (e.touches.length !== 1 || placed) return
     placeAt(e.touches[0].clientX, e.touches[0].clientY)
   }, {passive: true})
+  feed.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2 || !pinchStart || !placed) return
+    userScale = Math.min(1.4, Math.max(0.3, scaleStart * dist(e) / pinchStart))
+    character.scale.setScalar(userScale)
+    showSize()
+  }, {passive: true})
+  feed.addEventListener('touchend', () => { pinchStart = 0 }, {passive: true})
 
   document.getElementById('reset').onclick = () => {
     placed = false
@@ -170,8 +259,16 @@
     hint.style.display = 'flex'
     hintText.textContent = '置きたい場所の床をタップしてください'
   }
-  document.getElementById('turn').onclick = () => {
-    if (character) character.rotation.y += Math.PI / 4
+  const modeBtn = document.getElementById('mode')
+  modeBtn.onclick = () => {
+    mode = mode === '2d' ? '3d' : '2d'
+    char2d.visible = mode === '2d'
+    char3d.visible = mode === '3d'
+    modeBtn.textContent = mode === '2d' ? '3Dにする' : '2Dにする'
+    if (mode === '3d' && cam) {
+      const wp = character.position
+      character.rotation.y = Math.atan2(cam.position.x - wp.x, cam.position.z - wp.z)
+    }
   }
 
   // ---- 写真を撮る ----
