@@ -543,10 +543,10 @@
   const goCamera = () => { mark('camera'); intro.style.display = 'none'; startAR() }
 
   // ---- 位置情報のテスト（?geo=1）----
-  // 初めて開いた場所を中心として、このスマホに記録する。中心から半径（?r=、標準300m）の外では体験できない
+  // 初めて開いた場所を中心として、このスマホに記録する。中心から半径（?r=、標準50m）の外では体験できない
   // ?geo=reset で中心を消す（次に開いた場所が新しい中心になる）
   const geoCheck = (onInside) => {
-    const KEY = 'webar_geo_center', R = Number(Q.get('r')) || 300
+    const KEY = 'webar_geo_center', R = Number(Q.get('r')) || 50
     if (GEO === 'reset') { try { localStorage.removeItem(KEY) } catch (e) {} }
     const gate = document.getElementById('geoGate'), gTitle = document.getElementById('geoTitle'),
           gMsg = document.getElementById('geoMsg'), gRetry = document.getElementById('geoRetry'),
