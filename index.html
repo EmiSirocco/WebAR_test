@@ -569,7 +569,9 @@
       const d = Math.round(meters(center, here))
       if (DEBUG) info.style.display = 'block'
       info.textContent = '中心から ' + d + 'm（誤差 ±' + acc + 'm）／ 範囲 ' + R + 'm'
-      if (d <= R) {
+      // GPSの誤差を見込む：入るときは誤差（最大30m）の分だけゆるめ、一度入ったら、さらに30m離れるまでは追い出さない
+      const slack = Math.min(acc, 30) + (inside ? 30 : 0)
+      if (d <= R + slack) {
         clearTimeout(slowTimer)
         gate.style.display = 'none'
         if (!inside) { inside = true; done('geo'); onInside() }
