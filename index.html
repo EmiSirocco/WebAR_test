@@ -4,7 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>WebAR 記念写真テスト</title>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<!-- three.js r187（0.187.0）。リポジトリ内に置いた版を読み込み、8th Wall が使えるように window.THREE にも渡す -->
+<script type="module">
+  import * as THREE_NS from './lib/three/three.module.js'
+  window.THREE = Object.assign({}, THREE_NS)
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
 <style>
@@ -82,7 +86,9 @@
 
 <div id="credit">Powered by 8th Wall Engine © Niantic Spatial, Inc. <a href="https://github.com/8thwall/engine/blob/main/LICENSE">License</a></div>
 
-<script>
+<script type="module">
+  // three.js を読み込んだあとに動くよう、モジュールとして順番に実行する
+  const THREE = window.THREE
   const CHAR_PARAM = new URLSearchParams(location.search).get('c')
   // ?debug=1 のときだけ、距離や身長などの確認用の表示を出す（本番では出さない）
   const DEBUG = new URLSearchParams(location.search).get('debug') === '1'
