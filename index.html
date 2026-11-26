@@ -70,6 +70,15 @@
 </div>
 <div id="geoGate"><h2 id="geoTitle">位置を確認しています</h2><p id="geoMsg">位置情報の利用を「許可」してください</p><button class="main" id="geoRetry" style="display:none">もう一度確認する</button></div>
 <div id="geoInfo"></div>
+<div id="tally" style="position:fixed;left:12px;right:12px;bottom:calc(max(24px,env(safe-area-inset-bottom)) + 130px);z-index:12;display:none;background:rgba(0,0,0,.6);padding:8px 10px;border-radius:10px;font-size:13px">
+  <div id="tallyText" style="margin-bottom:6px"></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button data-k="ok" style="flex:1;padding:8px;border-radius:8px;border:0">ちょうど</button>
+    <button data-k="small" style="flex:1;padding:8px;border-radius:8px;border:0">小さい</button>
+    <button data-k="big" style="flex:1;padding:8px;border-radius:8px;border:0">大きい</button>
+    <button data-k="reset" style="padding:8px;border-radius:8px;border:0;opacity:.7">リセット</button>
+  </div>
+</div>
 
 <div id="credit">Powered by 8th Wall Engine © Niantic Spatial, Inc. <a href="https://github.com/8thwall/engine/blob/main/LICENSE">License</a></div>
 
@@ -269,6 +278,25 @@
   const sizeLabel = document.getElementById('size')
   let character = null, char3d = null, char2d = null, mode = '2d', userScale = 1, pinched = false
   let placed = false, surface = null, cam = null, sceneRef = null
+  // ---- 大きさの記録（?debug=1 のときだけ）：置くたびに「ちょうど／小さい／大きい」を押して数える ----
+  const TKEY = 'webar_size_tally'
+  const tallyBox = document.getElementById('tally'), tallyText = document.getElementById('tallyText')
+  let tally = {ok: 0, small: 0, big: 0}
+  try { tally = Object.assign(tally, JSON.parse(localStorage.getItem(TKEY)) || {}) } catch (e) {}
+  const drawTally = () => {
+    const n = tally.ok + tally.small + tally.big
+    const mode = new URLSearchParams(location.search).get('abs') === '0' ? '以前の方式' : '実寸モード'
+    tallyText.textContent = mode + '　ちょうど ' + tally.ok + '／小さい ' + tally.small + '／大きい ' + tally.big + '（' + n + '回中、ずれ ' + (tally.small + tally.big) + '回）'
+  }
+  tallyBox.querySelectorAll('button').forEach(b => b.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const k = b.dataset.k
+    if (k === 'reset') tally = {ok: 0, small: 0, big: 0}; else tally[k]++
+    try { localStorage.setItem(TKEY, JSON.stringify(tally)) } catch (err) {}
+    drawTally()
+  }))
+  tallyBox.addEventListener('touchstart', (e) => e.stopPropagation())
+  if (DEBUG) { tallyBox.style.display = 'block'; drawTally() }
   const showSize = () => { sizeLabel.textContent = '身長 約' + Math.round(PANEL_H * userScale * 100) + 'cm' }
   // 大きさのモード：等身大（床に立つ）／卓上（テーブルに立つ約20cm）
   // スマホの高さを「床から1.4m」「テーブルから0.45m」と仮定して、だいたいの実寸に合わせる
@@ -466,8 +494,9 @@
 
   // ---- 起動 ----
   const onxrloaded = () => {
-    // ?abs=1 で実寸モード（スマホを少し動かして測ってから始まる。回り込んだときのズレが減る想定）
-    XR8.XrController.configure({scale: new URLSearchParams(location.search).get('abs') === '1' ? 'absolute' : 'responsive'})
+    // 実寸モードを標準にする（スマホを少し動かして測ってから始まる。大きさと、回り込んだときのズレが減る想定）
+    // ?abs=0 で、以前の方式（スマホの高さを決め打ち）に戻せる
+    XR8.XrController.configure({scale: new URLSearchParams(location.search).get('abs') === '0' ? 'responsive' : 'absolute'})
     XR8.addCameraPipelineModules([
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
