@@ -516,7 +516,10 @@
     const gate = document.getElementById('geoGate'), gTitle = document.getElementById('geoTitle'),
           gMsg = document.getElementById('geoMsg'), gRetry = document.getElementById('geoRetry'),
           info = document.getElementById('geoInfo')
-    const showGate = (t, m, retry) => { gate.style.display = 'flex'; gTitle.textContent = t; gMsg.innerHTML = m; gRetry.style.display = retry ? 'block' : 'none' }
+    // 結果の画面は、最初の案内画面より手前に出す（案内画面に隠れて固まって見えないように）
+    const showGate = (t, m, retry) => { clearTimeout(slowTimer); intro.style.display = 'none'; gate.style.display = 'flex'; gTitle.textContent = t; gMsg.innerHTML = m; gRetry.style.display = retry ? 'block' : 'none' }
+    const startBtn = document.getElementById('introStart')
+    let slowTimer = null
     const meters = (a, b) => {
       const r = 6371000, k = Math.PI / 180
       const dLat = (b.lat - a.lat) * k, dLng = (b.lng - a.lng) * k
@@ -532,6 +535,7 @@
       if (DEBUG) info.style.display = 'block'
       info.textContent = '中心から ' + d + 'm（誤差 ±' + acc + 'm）／ 範囲 ' + R + 'm'
       if (d <= R) {
+        clearTimeout(slowTimer)
         gate.style.display = 'none'
         if (!inside) { inside = true; done('geo'); onInside() }
       } else {
@@ -547,7 +551,14 @@
     const watch = () => {
       if (!navigator.geolocation) return showGate('位置を確認できません', 'このブラウザは位置情報に対応していません', false)
       if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-      watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 5000, timeout: 20000})
+      // 場所を移ったあとはGPSの測り直しに時間がかかるので、まず速い（精度の低い）位置で判定し、そのあと精度の高い位置で見続ける
+      navigator.geolocation.getCurrentPosition(onPos, () => {}, {enableHighAccuracy: false, maximumAge: 60000, timeout: 8000})
+      watchId = navigator.geolocation.watchPosition(onPos, onErr, {enableHighAccuracy: true, maximumAge: 10000, timeout: 20000})
+      // 時間がかかっているときは、そのことを表示する（固まったように見えないように）
+      clearTimeout(slowTimer)
+      slowTimer = setTimeout(() => { if (!inside) startBtn.textContent = '位置を確認中…（屋外だと早く終わります）' }, 6000)
+      // 25秒たっても決まらなければ、やり直しの画面を出す
+      setTimeout(() => { if (!inside && gate.style.display !== 'flex') showGate('位置を確認できません', '位置の確認に時間がかかっています。<br>屋外や窓の近くで、もう一度確認してください', true) }, 25000)
     }
     gRetry.addEventListener('click', watch)
     mark('geo')
