@@ -45,13 +45,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 
 // ---- 動画の大きさ（スマホの縦長 9:16）----
-const W = 1080, H = 1920
 const DURATION = 10      // 動画の長さ（秒）
 const MOVE_END = 6.5     // カメラが寄り終わる時間
 const APPEAR_AT = 3.0    // 湯けむりが立つ時間
 const PANEL_H = 1.55     // 女の子の身長（m）
 
 const params = new URLSearchParams(location.search)
+const W = Number(params.get('w')) || 1080, H = Math.round(W * 16 / 9)   // ?w= で書き出しの大きさを変える
 const msg = document.getElementById('msg')
 
 // ---- 位置の設定（五台橋のデータの座標。上下を合わせて使う）----
@@ -203,7 +203,19 @@ renderer.setAnimationLoop(() => {
 const freezeT = params.get('t')
 bridge.initialized.then(() => {
   msg.textContent = '準備できました。\n「再生」で流れを確認、「録画して保存」で動画ファイルになります。'
-  if (freezeT !== null) {
+  if (params.get('step') !== null) {
+    // 書き出し用：1コマずつ進めて描く（録画ボタンを使わずに動画を作るため）
+    renderer.setAnimationLoop(null)
+    let cur = -1 / 30
+    window.stepTo = (T) => {
+      while (cur + 1 / 30 <= T + 1e-6) { cur += 1 / 30; frame(cur, 1 / 30) }
+      setCam(T)
+      girl.rotation.y = Math.atan2(camera.position.x - girl.position.x, camera.position.z - girl.position.z)
+      renderer.render(scene, camera)
+    }
+    window.redraw = () => renderer.render(scene, camera)
+    document.title = 'ready'
+  } else if (freezeT !== null) {
     const T = parseFloat(freezeT)
     setCam(T)
     for (let s = 0; s <= T; s += 1 / 30) frame(s, 1 / 30)

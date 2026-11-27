@@ -1,0 +1,29 @@
+# ロリポップへのアップロード（FTPS）
+# 使う前に、GitHub のリポジトリの Settings → Secrets and variables → Actions に次の3つを登録する。
+#   LOLIPOP_FTP_SERVER   … ロリポップのFTPサーバー名（ユーザー専用ページの「アカウント情報」に表示）
+#   LOLIPOP_FTP_USER     … FTPアカウント
+#   LOLIPOP_FTP_PASSWORD … FTPパスワード
+# 置き場所（ロリポップ側のフォルダ）は、下の server-dir で決める。
+# 最初は手動で動かす（Actions → Deploy to Lolipop → Run workflow）。うまくいったら push でも動くようにする。
+name: Deploy to Lolipop
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload by FTPS
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.LOLIPOP_FTP_SERVER }}
+          username: ${{ secrets.LOLIPOP_FTP_USER }}
+          password: ${{ secrets.LOLIPOP_FTP_PASSWORD }}
+          protocol: ftps
+          server-dir: ./webar-test/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            .github/**
+            godai/**
+            README*.md
